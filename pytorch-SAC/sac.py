@@ -3,16 +3,20 @@ import numpy as np
 import time
 import os
 
+# import roboschool
+
+
 import torch
 import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
-from torch.distributions import Normal
+from torch.distributions import Normal, kl
 from torch import multiprocessing as mp
 from tensorboardX import SummaryWriter
 
 from NormalizedActions import NormalizedActions
 from ReplayBuffer import ReplayBuffer
+from CombinedReplayBuffer import CombinedReplayBuffer
 from Metrics import RunningMean
 from Networks import SoftQNetwork, PolicyNetwork
 from Hyperparameters import *
@@ -86,7 +90,8 @@ class SAC(object):
         self.pi_net = self.pi_net.to(DEVICE, non_blocking=True)
         self.pi_net.share_memory()
 
-        self.replay_buffer = ReplayBuffer(REPLAY_SIZE)
+        # self.replay_buffer = ReplayBuffer(REPLAY_SIZE)
+        self.replay_buffer = CombinedReplayBuffer(REPLAY_SIZE)
 
         self.q_loss = nn.MSELoss()
 
@@ -283,12 +288,14 @@ class SAC(object):
                 )
                 fps = epoch_steps / epoch_time
                 print(
-                    f"Iter {self.iteration} - Time {fps:.2f}s - Reward {cumulative_reward:.4f} - Return {average_return.result():.4f}"
+                    f"Iter {self.iteration} - FPS {fps:.2f}s - Reward {cumulative_reward:.4f} - Return {average_return.result():.4f}"
                 )
                 average_return.reset()
                 cumulative_reward = 0
                 start_time = time.time()
                 start_iteration = self.iteration
+
+        self.transition_process.terminate()
 
     def get_latest_checkpoint(self, return_iteration=False):
         """Returns the latest checkpoint path
@@ -449,6 +456,14 @@ class SAC(object):
 
         return q_value_target.data.cpu().numpy().mean()
 
+
+"""
+if __name__ == "__main__":
+    sac = SAC(env_name="RoboschoolHumanoid-v1",
+              data_save_dir="../RoboschoolHumanoid-v1")
+    sac.train(resume_training=False)
+    #sac.test(render=True, use_internal_policy=False, num_games=10)
+"""
 
 if __name__ == "__main__":
     sac = SAC(env_name="Ant-v2",

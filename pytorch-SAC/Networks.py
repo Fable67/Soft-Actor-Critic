@@ -14,12 +14,8 @@ class SoftQNetwork(nn.Module):
         self.hh = nn.Linear(hidden_size, hidden_size)
         self.ho = nn.Linear(hidden_size, 1)
 
-        self.ih.weight.data.uniform_(-1e-3, 1e-3)
-        self.ih.bias.data.uniform_(-1e-3, 1e-3)
-        self.hh.weight.data.uniform_(-1e-3, 1e-3)
-        self.hh.bias.data.uniform_(-1e-3, 1e-3)
-        self.ho.weight.data.uniform_(-1e-3, 1e-3)
-        self.ho.bias.data.uniform_(-1e-3, 1e-3)
+        self.ho.weight.data.uniform_(-3e-3, 3e-3)
+        self.ho.bias.data.uniform_(-3e-3, 3e-3)
 
     def forward(self, state, action):
         o = torch.cat([state, action], 1)
@@ -49,14 +45,10 @@ class PolicyNetwork(nn.Module):
         self.hm = nn.Linear(hidden_size, action_size)
         self.hl = nn.Linear(hidden_size, action_size)
 
-        self.ih.weight.data.uniform_(-1e-3, 1e-3)
-        self.ih.bias.data.uniform_(-1e-3, 1e-3)
-        self.hh.weight.data.uniform_(-1e-3, 1e-3)
-        self.hh.bias.data.uniform_(-1e-3, 1e-3)
-        self.hm.weight.data.uniform_(-1e-3, 1e-3)
-        self.hm.bias.data.uniform_(-1e-3, 1e-3)
-        self.hl.weight.data.uniform_(-1e-3, 1e-3)
-        self.hl.bias.data.uniform_(-1e-3, 1e-3)
+        self.hm.weight.data.uniform_(-3e-3, 3e-3)
+        self.hm.bias.data.uniform_(-3e-3, 3e-3)
+        self.hl.weight.data.uniform_(-3e-3, 3e-3)
+        self.hl.bias.data.uniform_(-3e-3, 3e-3)
 
     def forward(self, state):
         h = F.relu(self.ih(state))
