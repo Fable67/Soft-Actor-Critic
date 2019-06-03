@@ -330,7 +330,7 @@ class SAC(object):
         """
         assert isinstance(render, bool)
         assert isinstance(use_internal_policy, bool)
-        assert isinstance(num_games, bool) or num_games is None
+        assert isinstance(num_games, int) or num_games is None
 
         start_time = time.time()
         if use_internal_policy:
@@ -461,9 +461,10 @@ class SAC(object):
 if __name__ == "__main__":
     sac = SAC(env_name="RoboschoolHumanoid-v1",
               data_save_dir="../RoboschoolHumanoid-v1")
-    sac.train(resume_training=False)
-    #sac.test(render=True, use_internal_policy=False, num_games=10)
+    # sac.train(resume_training=False)
+    sac.test(render=True, use_internal_policy=False, num_games=10)
 """
+
 
 if __name__ == "__main__":
     sac = SAC(env_name="Ant-v2",
