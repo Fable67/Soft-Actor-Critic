@@ -200,12 +200,12 @@ class SAC(object):
             load_path, "Policy_optimizer_state_dict"
         )))
         self.log_alpha = torch.load(os.path.join(
-            self.data_save_dir,
-            f"saves/iter_{self.iteration}/Entropy_Coefficient"
+            load_path,
+            "Entropy_Coefficient"
         ))
         self.replay_buffer.load(os.path.join(
-            self.data_save_dir,
-            f"/saves/iter_{self.iteration}/Replay_Buffer_data"
+            load_path,
+            "Replay_Buffer_data"
         ))
 
     def train(self, resume_training=False):
@@ -461,8 +461,8 @@ class SAC(object):
 if __name__ == "__main__":
     sac = SAC(env_name="RoboschoolHumanoid-v1",
               data_save_dir="../RoboschoolHumanoid-v1")
-    # sac.train(resume_training=False)
-    sac.test(render=True, use_internal_policy=False, num_games=10)
+    sac.train(resume_training=True)
+    # sac.test(render=True, use_internal_policy=False, num_games=10)
 """
 
 
