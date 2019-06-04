@@ -20,7 +20,7 @@ class CombinedReplayBuffer(object):
         self.ptr = (self.ptr + 1) % self.size
 
     def sample(self, batch_size):
-        batch = [self.buffer[-1]]
+        batch = [self.buffer[min(0, self.ptr-1)]]
         batch += random.sample(self.buffer, batch_size-1)
         s, a, r, ns, d = map(np.array, zip(*batch))
         return s, a, r, ns, d
