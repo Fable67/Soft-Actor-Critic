@@ -22,14 +22,17 @@ from Networks import SoftQNetwork, PolicyNetwork
 from Hyperparameters import *
 
 
-def play_func(env_name, policy, trans_queue):
+def play_func(env_name, policy, trans_queue, exploration_flag):
     assert isinstance(env_name, str)
     assert isinstance(policy, PolicyNetwork)
 
     env = NormalizedActions(gym.make(env_name))
     s = env.reset()
     while True:
-        a = policy.forward_action(s)
+        if exploration_flag == 1:
+            a = policy.forward_action(s)
+        else:
+            a = env.action_space.sample()
         ns, r, d, info = env.step(a)
         trans_queue.put((s, a, r, ns, d))
         s = ns if not d else env.reset()
@@ -90,8 +93,11 @@ class SAC(object):
         self.pi_net = self.pi_net.to(DEVICE, non_blocking=True)
         self.pi_net.share_memory()
 
+        def getBuffer(x):
+            return ReplayBuffer if x is 'default' else CombinedReplayBuffer
         # self.replay_buffer = ReplayBuffer(REPLAY_SIZE)
-        self.replay_buffer = CombinedReplayBuffer(REPLAY_SIZE)
+        # self.replay_buffer = CombinedReplayBuffer(REPLAY_SIZE)
+        self.replay_buffer = getBuffer(REPLAY_TYPE)(REPLAY_SIZE)
 
         self.q_loss = nn.MSELoss()
 
@@ -101,17 +107,14 @@ class SAC(object):
 
         self.log_alpha = torch.zeros(1, device=DEVICE, requires_grad=True)
         self.alpha_optim = optim.Adam([self.log_alpha], lr=LEARNING_RATE)
-
-        self.entropy_target = torch.tensor(
-            -np.prod(self.eval_env.action_space.shape).item(),
-            dtype=torch.int32
-        )
-        self.entropy_target = self.entropy_target.to(DEVICE, non_blocking=True)
-        self.entropy_target = self.entropy_target.detach()
+        self.entropy_target = - \
+            torch.prod(torch.Tensor(self.eval_env.action_space.shape).to(
+                DEVICE, non_blocking=True)).item()
 
         self.transition_queue = mp.Queue(maxsize=PLAY_STEPS * 2)
+        self.exploration_flag = mp.Value('i', 0)
         self.transition_process = mp.Process(target=play_func, args=(
-            env_name, self.pi_net, self.transition_queue))
+            env_name, self.pi_net, self.transition_queue, self.exploration_flag))
         self.transition_process.start()
 
     def get_checkpoint_file(self, model_name):
@@ -242,6 +245,7 @@ class SAC(object):
                 len(self.replay_buffer) >= INITIAL_REPLAY_SIZE and \
                 self.iteration % PLAY_STEPS == 0
             if update_cond:
+                self.exploration_flag = 1
                 ret = self._update()
                 average_return.add(ret)
 
@@ -339,7 +343,6 @@ class SAC(object):
             PI_NET = PolicyNetwork(self.o_dim, self.a_dim,
                                    HIDDEN_SIZE, LOGSTD_MIN, LOGSTD_MAX)
             PI_NET = PI_NET.to(DEVICE, non_blocking=True)
-            # PI_NET.load(f"{self.data_save_dir}/saves/iter_{self.iteration}/Policy_net_state_dict")
             PI_NET.load(os.path.join(
                 self.get_latest_checkpoint(), "Policy_net_state_dict"))
         cumulative_rewards = np.empty(
@@ -399,19 +402,21 @@ class SAC(object):
 
         pred_q_value_0 = self.q0_net(state, action)
         pred_q_value_1 = self.q1_net(state, action)
-        next_action, next_logprob, _, _, _ = self.pi_net.evaluate(next_state)
-        next_q_value = torch.min(
-            self.q0_target_net(next_state, next_action),
-            self.q1_target_net(next_state, next_action)
-        )
-        next_soft_q_value = next_q_value - alpha * next_logprob
+        with torch.no_grad():
+            next_action, next_logprob, _, _, _ = self.pi_net.evaluate(
+                next_state)
+            next_q_value = torch.min(
+                self.q0_target_net(next_state, next_action),
+                self.q1_target_net(next_state, next_action)
+            )
+            next_soft_q_value = next_q_value - alpha * next_logprob
 
-        q_value_target = reward + GAMMA * (1. - done) * next_soft_q_value
+            q_value_target = reward + GAMMA * (1. - done) * next_soft_q_value
         q0_loss = 0.5 * self.q_loss(
-            pred_q_value_0, q_value_target.detach()
+            pred_q_value_0, q_value_target
         )
         q1_loss = 0.5 * self.q_loss(
-            pred_q_value_1, q_value_target.detach()
+            pred_q_value_1, q_value_target
         )
 
         self.q0_optim.zero_grad()
@@ -459,8 +464,8 @@ class SAC(object):
 
 """
 if __name__ == "__main__":
-    sac = SAC(env_name="RoboschoolHumanoid-v1",
-              data_save_dir="../RoboschoolHumanoid-v1")
+    sac = SAC(env_name="RoboschoolHumanoidFlagrun-v1",
+              data_save_dir="../RoboschoolHumanoidFlagrun-v1")
     sac.train(resume_training=True)
     # sac.test(render=True, use_internal_policy=False, num_games=10)
 """

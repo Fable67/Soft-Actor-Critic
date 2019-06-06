@@ -69,16 +69,8 @@ class PolicyNetwork(nn.Module):
         else:
             std = torch.zeros(log_std.size(), device=DEVICE)
 
-        #normal = Normal(mean, std)
-        #z = normal.sample()
-        z = (
-            mean + std *
-            Normal(
-                torch.zeros(mean.size(), device=DEVICE),
-                torch.ones(std.size(), device=DEVICE)
-            ).sample()
-        )
-        z.requires_grad_()
+        normal = Normal(mean, std)
+        z = normal.rsample()
         action = torch.tanh(z)
 
         action = action.detach().cpu().numpy()
@@ -89,21 +81,13 @@ class PolicyNetwork(nn.Module):
         std = log_std.exp()
 
         normal = Normal(mean, std)
-        #z = normal.sample().detach()
-        z = (
-            mean + std *
-            Normal(
-                torch.zeros(mean.size(), device=DEVICE),
-                torch.ones(std.size(), device=DEVICE)
-            ).sample()
-        )
-        z.requires_grad_()
+        z = normal.rsample()
         action = torch.tanh(z)
 
         log_prob = normal.log_prob(z) - torch.log(1 - action.pow(2) + 1e-6)
         log_prob = log_prob.sum(1, keepdim=True)
 
-        return action, log_prob, z, mean, log_std
+        return action, log_prob, z, torch.tanh(mean), log_std
 
     def save(self, path):
         torch.save(self.state_dict(), path)
