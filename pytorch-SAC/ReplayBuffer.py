@@ -32,5 +32,5 @@ class ReplayBuffer(object):
         np.save(f"{path}_info.npy", info)
 
     def load(self, path):
-        self.buffer = np.load(f"{path}_buffer.npy").tolist()
-        self.size, self.ptr = np.load(f"{path}_info.npy").tolist()
+        self.buffer = np.load(f"{path}_buffer.npy", allow_pickle=True).tolist()
+        self.size, self.ptr = np.load(f"{path}_info.npy", allow_pickle=True).tolist()

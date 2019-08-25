@@ -3,39 +3,17 @@ import numpy as np
 import time
 import os
 
-# import roboschool
-
-
 import torch
 import torch.nn as nn
-import torch.optim as optim
 import torch.nn.functional as F
 from torch.distributions import Normal, kl
-from torch import multiprocessing as mp
 from tensorboardX import SummaryWriter
 
 from NormalizedActions import NormalizedActions
-from ReplayBuffer import ReplayBuffer
-from CombinedReplayBuffer import CombinedReplayBuffer
 from Metrics import RunningMean
 from Networks import SoftQNetwork, PolicyNetwork
 from Hyperparameters import *
-
-
-def play_func(env_name, policy, trans_queue, exploration_flag):
-    assert isinstance(env_name, str)
-    assert isinstance(policy, PolicyNetwork)
-
-    env = NormalizedActions(gym.make(env_name))
-    s = env.reset()
-    while True:
-        if exploration_flag == 1:
-            a = policy.forward_action(s)
-        else:
-            a = env.action_space.sample()
-        ns, r, d, info = env.step(a)
-        trans_queue.put((s, a, r, ns, d))
-        s = ns if not d else env.reset()
+import utils
 
 
 class SAC(object):
@@ -55,13 +33,9 @@ class SAC(object):
         assert isinstance(env_name, str)
         assert isinstance(data_save_dir, str) or data_save_dir is None
 
-        mp.set_start_method("spawn")
-        torch.manual_seed(1001)
-        np.random.seed(1001)
-
         self.iteration = 0
 
-        #self.env = NormalizedActions(gym.make(env_name))
+        self.env = NormalizedActions(gym.make(env_name))
         self.eval_env = NormalizedActions(gym.make(env_name))
 
         self.a_dim = self.eval_env.action_space.shape[0]
@@ -79,43 +53,25 @@ class SAC(object):
             self.o_dim, self.a_dim, HIDDEN_SIZE).to(DEVICE, non_blocking=True)
         self.q0_target_net = SoftQNetwork(
             self.o_dim, self.a_dim, HIDDEN_SIZE).to(DEVICE, non_blocking=True)
+        self.q0_target_net = utils.hard_copy(self.q0_target_net, self.q0_net)
         self.q1_target_net = SoftQNetwork(
             self.o_dim, self.a_dim, HIDDEN_SIZE).to(DEVICE, non_blocking=True)
-        for p_target, p in zip(
-                self.q0_target_net.parameters(), self.q0_net.parameters()):
-            p_target.data.copy_(p.data)
-        for p_target, p in zip(
-                self.q1_target_net.parameters(), self.q1_net.parameters()):
-            p_target.data.copy_(p.data)
+        self.q1_target_net = utils.hard_copy(self.q1_target_net, self.q1_net)
 
-        self.pi_net = PolicyNetwork(
-            self.o_dim, self.a_dim, HIDDEN_SIZE, LOGSTD_MIN, LOGSTD_MAX)
+        self.pi_net = PolicyNetwork(self.o_dim, self.a_dim, HIDDEN_SIZE, LOGSTD_MIN, LOGSTD_MAX)
         self.pi_net = self.pi_net.to(DEVICE, non_blocking=True)
-        self.pi_net.share_memory()
 
-        def getBuffer(x):
-            return ReplayBuffer if x is 'default' else CombinedReplayBuffer
-        # self.replay_buffer = ReplayBuffer(REPLAY_SIZE)
-        # self.replay_buffer = CombinedReplayBuffer(REPLAY_SIZE)
-        self.replay_buffer = getBuffer(REPLAY_TYPE)(REPLAY_SIZE)
+        self.replay_buffer = REPLAY_BUFFER(REPLAY_SIZE)
 
-        self.q_loss = nn.MSELoss()
-
-        self.q0_optim = optim.Adam(self.q0_net.parameters(), lr=LEARNING_RATE)
-        self.q1_optim = optim.Adam(self.q1_net.parameters(), lr=LEARNING_RATE)
-        self.pi_optim = optim.Adam(self.pi_net.parameters(), lr=LEARNING_RATE)
+        self.q0_optim = Q_OPTIM(self.q0_net.parameters(), lr=Q_LEARNING_RATE)
+        self.q1_optim = Q_OPTIM(self.q1_net.parameters(), lr=Q_LEARNING_RATE)
+        self.pi_optim = POLICY_OPTIM(self.pi_net.parameters(), lr=POLICY_LEARNING_RATE)
 
         self.log_alpha = torch.zeros(1, device=DEVICE, requires_grad=True)
-        self.alpha_optim = optim.Adam([self.log_alpha], lr=LEARNING_RATE)
+        self.alpha_optim = ALPHA_OPTIM([self.log_alpha], lr=ALPHA_LEARNING_RATE)
         self.entropy_target = - \
             torch.prod(torch.Tensor(self.eval_env.action_space.shape).to(
                 DEVICE, non_blocking=True)).item()
-
-        self.transition_queue = mp.Queue(maxsize=PLAY_STEPS * 2)
-        self.exploration_flag = mp.Value('i', 0)
-        self.transition_process = mp.Process(target=play_func, args=(
-            env_name, self.pi_net, self.transition_queue, self.exploration_flag))
-        self.transition_process.start()
 
     def get_checkpoint_file(self, model_name):
         """Returns the checkpoint path for saving a model given the file name
@@ -234,72 +190,78 @@ class SAC(object):
         average_return = RunningMean()
         start_time = time.time()
         start_iteration = self.iteration
-        while self.iteration < NUM_ITERATIONS and self.transition_process.is_alive():
-            s, a, r, ns, d = self.transition_queue.get()
-            self.replay_buffer.add(s, a, r, ns, d)
-            cumulative_reward += r
-            self.iteration += 1
+        while self.iteration < NUM_ITERATIONS:
+            s = self.env.reset()
+            d = False
+            while not d:
+                if len(self.replay_buffer) >= INITIAL_REPLAY_SIZE:
+                    a = self.pi_net.forward_action(s)
+                else:
+                    a = self.env.action_space.sample()
+                ns, r, d, info = self.env.step(a)
+                self.replay_buffer.add(s, a, r, ns, d)
+                s = ns
 
-            update_cond = \
-                len(self.replay_buffer) >= BATCH_SIZE and \
-                len(self.replay_buffer) >= INITIAL_REPLAY_SIZE and \
-                self.iteration % PLAY_STEPS == 0
-            if update_cond:
-                self.exploration_flag = 1
-                ret = self._update()
-                average_return.add(ret)
+                cumulative_reward += r
+                self.iteration += 1
 
-            if self.iteration % SAVE_FREQ == 0:
-                print("Saving checkpoint...")
-                self.save_models()
-                print("Resuming training...")
+                update_cond = \
+                    len(self.replay_buffer) >= BATCH_SIZE and \
+                    self.iteration % GRADIENT_STEPS == 0
+                if update_cond:
+                    self.exploration_flag = 1
+                    self._update()
 
-            if self.iteration % EVAL_FREQ == 0:
-                mean_cumulative_reward, time_eval = self.test()
-                self.writer.add_scalar(
-                    "metrics/eval_rewards", mean_cumulative_reward, self.iteration
-                )
-                print(
-                    f"Iter {self.iteration} - FPS {time_eval:.2f}s - Evaluation Reward {mean_cumulative_reward:.4f}"
-                )
-                start_time += time_eval
+                if self.iteration % SAVE_FREQ == 0:
+                    print("Saving checkpoint...")
+                    self.save_models()
+                    print("Resuming training...")
 
-            if d:
-                self.writer.add_scalar(
-                    "metrics/cumulative_reward",
-                    cumulative_reward,
-                    self.iteration
-                )
+                if self.iteration % EVAL_FREQ == 0:
+                    mean_cumulative_reward, time_eval = self.test()
+                    self.writer.add_scalar(
+                        "metrics/eval_rewards",
+                        mean_cumulative_reward,
+                        self.iteration
+                    )
+                    print(
+                        f"Iter {self.iteration} - Evaluation Reward {mean_cumulative_reward:.4f}"
+                    )
+                    start_time += time_eval
 
-                self.writer.add_scalar(
-                    "metrics/average_epoch_return",
-                    average_return.result(),
-                    self.iteration
-                )
-                epoch_time = time.time() - start_time
+            average_return.add(cumulative_reward)
 
-                self.writer.add_scalar(
-                    "metrics/seconds_per_epoch",
-                    epoch_time,
-                    self.iteration
-                )
-                epoch_steps = self.iteration - start_iteration
+            self.writer.add_scalar(
+                "metrics/cumulative_reward",
+                cumulative_reward,
+                self.iteration
+            )
 
-                self.writer.add_scalar(
-                    "metrics/Steps",
-                    epoch_steps,
-                    self.iteration
-                )
-                fps = epoch_steps / epoch_time
-                print(
-                    f"Iter {self.iteration} - FPS {fps:.2f}s - Reward {cumulative_reward:.4f} - Return {average_return.result():.4f}"
-                )
-                average_return.reset()
-                cumulative_reward = 0
-                start_time = time.time()
-                start_iteration = self.iteration
+            self.writer.add_scalar(
+                "metrics/average_epoch_return",
+                average_return.result(),
+                self.iteration
+            )
+            epoch_time = time.time() - start_time
 
-        self.transition_process.terminate()
+            self.writer.add_scalar(
+                "metrics/seconds_per_epoch",
+                epoch_time,
+                self.iteration
+            )
+            epoch_steps = self.iteration - start_iteration
+
+            self.writer.add_scalar(
+                "metrics/Steps",
+                epoch_steps,
+                self.iteration
+            )
+            print(
+                f"Iter {self.iteration} - Reward {cumulative_reward:.4f} - Return {average_return.result():.4f}"
+            )
+            cumulative_reward = 0
+            start_time = time.time()
+            start_iteration = self.iteration
 
     def get_latest_checkpoint(self, return_iteration=False):
         """Returns the latest checkpoint path
@@ -363,32 +325,21 @@ class SAC(object):
                     # self.eval_env.close()
                     break
             cumulative_rewards[i] = cumulative_reward
-            self.eval_env.close()
+        self.eval_env.close()
         return cumulative_rewards.mean(), time.time() - start_time
 
     def _update(self):
-        """Update all networks
-
-        Returns:
-            float: Temporal Difference Target
-        """
-        state, action, reward, next_state, done = self.replay_buffer.sample(
-            BATCH_SIZE)
+        state, action, reward, next_state, done = self.replay_buffer.sample(BATCH_SIZE)
 
         state = torch.FloatTensor(state).to(DEVICE, non_blocking=True)
         action = torch.FloatTensor(action).to(DEVICE, non_blocking=True)
-        reward = torch.FloatTensor(reward).unsqueeze(
-            1).to(DEVICE, non_blocking=True)
-        next_state = torch.FloatTensor(
-            next_state).to(DEVICE, non_blocking=True)
-        done = torch.FloatTensor(np.float16(done)).unsqueeze(
-            1).to(DEVICE, non_blocking=True)
+        reward = torch.FloatTensor(reward).unsqueeze(1).to(DEVICE, non_blocking=True)
+        next_state = torch.FloatTensor(next_state).to(DEVICE, non_blocking=True)
+        done = torch.FloatTensor(np.float16(done)).unsqueeze(1).to(DEVICE, non_blocking=True)
 
-        new_action, logprob, _, _, log_stddev = self.pi_net.evaluate(state)
+        new_action, logprob, _, mean, log_stddev = self.pi_net.evaluate(state)
 
-        alpha_loss = -(
-            self.log_alpha * (logprob + self.entropy_target).detach()
-        ).mean()
+        alpha_loss = ((-self.log_alpha) * (logprob + self.entropy_target).detach()).sum()
         self.alpha_optim.zero_grad()
         alpha_loss.backward()
         self.alpha_optim.step()
@@ -398,26 +349,30 @@ class SAC(object):
             self.q0_net(state, new_action),
             self.q1_net(state, new_action)
         )
-        pi_loss = (alpha * logprob - q_value).mean()
+        pi_loss = (alpha * logprob - q_value).sum()
 
         pred_q_value_0 = self.q0_net(state, action)
         pred_q_value_1 = self.q1_net(state, action)
-        with torch.no_grad():
-            next_action, next_logprob, _, _, _ = self.pi_net.evaluate(
-                next_state)
-            next_q_value = torch.min(
-                self.q0_target_net(next_state, next_action),
-                self.q1_target_net(next_state, next_action)
-            )
-            next_soft_q_value = next_q_value - alpha * next_logprob
 
-            q_value_target = reward + GAMMA * (1. - done) * next_soft_q_value
-        q0_loss = 0.5 * self.q_loss(
-            pred_q_value_0, q_value_target
+        # with torch.no_grad():
+        next_action, next_logprob, _, _, _ = self.pi_net.evaluate(next_state)
+        next_q_value = torch.min(
+            self.q0_target_net(next_state, next_action),
+            self.q1_target_net(next_state, next_action)
         )
-        q1_loss = 0.5 * self.q_loss(
-            pred_q_value_1, q_value_target
-        )
+        next_soft_q_value = next_q_value - alpha * next_logprob
+        q_value_target = reward + GAMMA * (1. - done) * next_soft_q_value
+
+        # q0_loss = 0.5 * self.q_loss(
+        #    pred_q_value_0, q_value_target
+        # )
+        q0_loss = 0.5 * (pred_q_value_0 - q_value_target.detach()).pow(2)
+        q0_loss = q0_loss.sum()
+        # q1_loss = 0.5 * self.q_loss(
+        #    pred_q_value_1, q_value_target
+        # )
+        q1_loss = 0.5 * (pred_q_value_1 - q_value_target.detach()).pow(2)
+        q1_loss = q1_loss.sum()
 
         self.q0_optim.zero_grad()
         q0_loss.backward()
@@ -431,16 +386,19 @@ class SAC(object):
         pi_loss.backward()
         self.pi_optim.step()
 
-        for target_p, p in zip(
-            self.q0_target_net.parameters(), self.q0_net.parameters()
-        ):
-            target_p.data.copy_(target_p.data * (1. - TAU) + p.data * TAU)
-        for target_p, p in zip(
-            self.q1_target_net.parameters(), self.q1_net.parameters()
-        ):
-            target_p.data.copy_(target_p.data * (1. - TAU) + p.data * TAU)
+        self.q0_target_net = utils.soft_copy(self.q0_target_net, self.q0_net, TAU)
+        self.q1_target_net = utils.soft_copy(self.q1_target_net, self.q1_net, TAU)
 
         if self.iteration % SUMMARY_FREQ == 0:
+
+            _, _, _, new_mean, new_log_stddev = self.pi_net.evaluate(next_state)
+
+            old_pi = Normal(mean, log_stddev.exp())
+            new_pi = Normal(new_mean, new_log_stddev.exp())
+
+            self.writer.add_scalar(
+                "metrics/KL", kl.kl_divergence(old_pi, new_pi).sum(), self.iteration
+            )
 
             self.writer.add_scalar(
                 "metrics/alpha", self.log_alpha.exp(), self.iteration
@@ -458,21 +416,3 @@ class SAC(object):
             self.writer.add_scalar(
                 "losses/alpha_loss", alpha_loss, self.iteration
             )
-
-        return q_value_target.data.cpu().numpy().mean()
-
-
-"""
-if __name__ == "__main__":
-    sac = SAC(env_name="RoboschoolHumanoidFlagrun-v1",
-              data_save_dir="../RoboschoolHumanoidFlagrun-v1")
-    sac.train(resume_training=True)
-    # sac.test(render=True, use_internal_policy=False, num_games=10)
-"""
-
-
-if __name__ == "__main__":
-    sac = SAC(env_name="Ant-v2",
-              data_save_dir="../Ant-v2")
-    sac.train(resume_training=False)
-    sac.test(render=True, use_internal_policy=False, num_games=10)
