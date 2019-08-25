@@ -6,30 +6,6 @@ from torch.distributions import Normal
 from Hyperparameters import DEVICE
 
 
-class ValueNetwork(nn.Module):
-    def __init__(self, obs_size, hidden_size):
-        super(ValueNetwork, self).__init__()
-
-        self.ih = nn.Linear(obs_size, hidden_size)
-        self.hh = nn.Linear(hidden_size, hidden_size)
-        self.ho = nn.Linear(hidden_size, 1)
-
-        self.ho.weight.data.uniform_(-3e-3, 3e-3)
-        self.ho.bias.data.uniform_(-3e-3, 3e-3)
-
-    def forward(self, state, action):
-        o = F.relu(self.ih(state))
-        o = F.relu(self.hh(o))
-        o = self.ho(o)
-        return o
-
-    def save(self, path):
-        torch.save(self.state_dict(), path)
-
-    def load(self, path):
-        self.load_state_dict(torch.load(path))
-
-
 class SoftQNetwork(nn.Module):
     def __init__(self, obs_size, action_size, hidden_size):
         super(SoftQNetwork, self).__init__()
