@@ -17,7 +17,7 @@ import utils
 
 
 class SAC(object):
-    def __init__(self, env_name, data_save_dir=None):
+    def __init__(self, env_name, data_save_dir):
         """Initializes: 
             environment
             networks
@@ -31,7 +31,7 @@ class SAC(object):
             data_save_dir (None, str, optional): Where to save summary and checkpoints?
         """
         assert isinstance(env_name, str)
-        assert isinstance(data_save_dir, str) or data_save_dir is None
+        assert isinstance(data_save_dir, str)
 
         self.iteration = 0
 
@@ -179,8 +179,6 @@ class SAC(object):
             os.path.join(self.data_save_dir, "summary")
         )
 
-        resume_training = resume_training is True and self.data_save_dir is not None
-
         if resume_training:
             self.load_models()
 
@@ -305,8 +303,7 @@ class SAC(object):
             PI_NET = PolicyNetwork(self.o_dim, self.a_dim,
                                    HIDDEN_SIZE, LOGSTD_MIN, LOGSTD_MAX)
             PI_NET = PI_NET.to(DEVICE, non_blocking=True)
-            PI_NET.load(os.path.join(
-                self.get_latest_checkpoint(), "Policy_net_state_dict"))
+            PI_NET.load(os.path.join(self.get_latest_checkpoint(), "Policy_net_state_dict"))
         cumulative_rewards = np.empty(
             (NUM_EVAL_GAMES if num_games is None else num_games, ))
         for i in range(NUM_EVAL_GAMES if num_games is None else num_games):
