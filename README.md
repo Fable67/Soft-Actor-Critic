@@ -8,7 +8,7 @@ Soft actor-critic is a deep reinforcement learning framework for training maximu
 
 This implementation uses Pytorch.
 
-#### What is novel about this implementation?
+### What is novel about this implementation?
 
 It supports the Combined experience replay introduced by this paper: [A Deeper Look at Experience Replay](https://arxiv.org/abs/1712.01275) <br>
 It supports the new Ranger optimizer introduced by this blog post: [New Deep Learning Optimizer, Ranger: Synergistic combination of RAdam + LookAhead for the best of both.](https://medium.com/@lessw/new-deep-learning-optimizer-ranger-synergistic-combination-of-radam-lookahead-for-the-best-of-2dc83f79a48d)
@@ -28,6 +28,8 @@ Continue training the aformentioned agent <br>
 
 Test the agent trained on Ant-v3 in the environment with weights loaded from Ant-v3/ <br>
 `python3 main.py --env_name=Ant-v3 --log_dir=Ant-v3 --test --render_testing --num_test_games=10`
+
+#### To change hyperparameters of the SAC algorithm feel free to look at pytorch-SAC/Hyperparameters.py
 
 
 ## Prerequisites
