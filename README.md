@@ -20,13 +20,13 @@ Soft Actor-Critic can be run locally.
 
 Examples:
 
-Train agent on the Humanoid-v2 mujoco environment and save checkpoints and tensorboard summary to directory Humanoid-v2/
+Train agent on the Humanoid-v2 mujoco environment and save checkpoints and tensorboard summary to directory Humanoid-v2/ <br>
 `python3 main.py --env_name=Humanoid-v2 --log_dir=Humanoid-v2`
 
-Continue training the aformentioned agent
+Continue training the aformentioned agent <br>
 `python3 main.py --env_name=Humanoid-v2 --log_dir=Humanoid-v2 --continue_training`
 
-Test the agent trained on Ant-v3 in the environment with weights loaded from Ant-v3/
+Test the agent trained on Ant-v3 in the environment with weights loaded from Ant-v3/ <br>
 `python3 main.py --env_name=Ant-v3 --log_dir=Ant-v3 --test --render_testing --num_test_games=10`
 
 
