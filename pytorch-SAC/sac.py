@@ -2,12 +2,13 @@ import gym
 import numpy as np
 import time
 import os
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.distributions import Normal, kl
-from tensorboardX import SummaryWriter
+from torch.utils.tensorboard import SummaryWriter
 
 from NormalizedActions import NormalizedActions
 from Metrics import RunningMean
