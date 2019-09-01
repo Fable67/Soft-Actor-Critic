@@ -189,6 +189,7 @@ class SAC(object):
         average_return = RunningMean()
         start_time = time.time()
         start_iteration = self.iteration
+        local_iteration = 0
         while self.iteration < NUM_ITERATIONS:
             s = self.env.reset()
             d = False
@@ -203,13 +204,15 @@ class SAC(object):
 
                 cumulative_reward += r
                 self.iteration += 1
+                local_iteration += 1
 
                 update_cond = \
                     len(self.replay_buffer) >= BATCH_SIZE and \
-                    self.iteration % GRADIENT_STEPS == 0
+                    local_iteration % NUM_EXPL_STEPS_PER_TRAIN_LOOP == 0
                 if update_cond:
-                    self.exploration_flag = 1
-                    self._update()
+                    local_iteration = 0
+                    for _ in range(NUM_TRAINS_PER_TRAIN_LOOP):
+                        self._update()
 
                 if self.iteration % SAVE_FREQ == 0:
                     print("Saving checkpoint...")
