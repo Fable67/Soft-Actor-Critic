@@ -32,6 +32,11 @@ Test the agent trained on Ant-v3 in the environment with weights loaded from Ant
 #### To change hyperparameters of the SAC algorithm feel free to look at pytorch-SAC/Hyperparameters.py
 
 
+# Results
+[graph]: https://github.com/Fable67/Soft-Actor-Critic-Pytorch/master/assets/EvaluationRewardsHumanoid-v2.png "Evaluation Reward for Humanoid Environment"
+![A Graph showing the Evaluation Reward over training time for the Humanoid Environment][graph] 
+
+
 ## Prerequisites
 
 Most of the models require a [Mujoco](https://www.roboti.us/license.html) license.
