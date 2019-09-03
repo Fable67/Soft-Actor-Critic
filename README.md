@@ -33,7 +33,7 @@ Test the agent trained on Ant-v3 in the environment with weights loaded from Ant
 
 
 # Results
-[graph]: https://github.com/Fable67/Soft-Actor-Critic-Pytorch/master/assets/EvaluationRewardsHumanoid-v2.png "Evaluation Reward for Humanoid Environment"
+[graph]: https://https://github.com/Fable67/Soft-Actor-Critic-Pytorch/blob/master/assets/EvaluationRewardsHumanoid-v2.png "Evaluation Reward for Humanoid Environment"
 ![A Graph showing the Evaluation Reward over training time for the Humanoid Environment][graph] 
 
 
