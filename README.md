@@ -34,7 +34,7 @@ Test the agent trained on Ant-v3 in the environment with weights loaded from Ant
 
 # Results
 Evaluation Reward for Humanoid Environment
-<img src="./assets/EvaluationRewardsHumanoid-v2.png" width="80%">
+<img src="./assets/EvaluationRewardsHumanoid-v2.png">
 
 ## Prerequisites
 
