@@ -36,6 +36,9 @@ Test the agent trained on Ant-v3 in the environment with weights loaded from Ant
 Evaluation Reward for Humanoid Environment
 <img src="./assets/EvaluationRewardsHumanoid-v2.png">
 
+Evaluation Reward for Humanoid Environment
+<img src="./assets/EvaluationRewardsAnt-v3.png">
+
 ## Prerequisites
 
 Most of the models require a [Mujoco](https://www.roboti.us/license.html) license.
