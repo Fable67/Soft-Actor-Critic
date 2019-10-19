@@ -330,6 +330,8 @@ class SAC(object):
         return cumulative_rewards.mean(), time.time() - start_time
 
     def _update(self):
+        """Update all model parameters
+        """
         state, action, reward, next_state, done = self.replay_buffer.sample(BATCH_SIZE)
 
         state = torch.FloatTensor(state).to(DEVICE, non_blocking=True)
