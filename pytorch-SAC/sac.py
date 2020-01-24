@@ -1,4 +1,5 @@
 import gym
+import roboschool
 import numpy as np
 import time
 import os
@@ -109,9 +110,6 @@ class SAC(object):
         self.pi_net.save(
             self.get_checkpoint_file("Policy_net_state_dict")
         )
-        self.replay_buffer.save(
-            self.get_checkpoint_file("Replay_Buffer_data")
-        )
         torch.save(
             self.q0_optim.state_dict(),
             self.get_checkpoint_file("Q0_optimizer_state_dict")
@@ -125,8 +123,15 @@ class SAC(object):
             self.get_checkpoint_file("Policy_optimizer_state_dict")
         )
         torch.save(
+            self.alpha_optim.state_dict(),
+            self.get_checkpoint_file("Alpha_optimizer_state_dict")
+        )
+        torch.save(
             self.log_alpha,
-            self.get_checkpoint_file("Entropy_Coefficient")
+            self.get_checkpoint_file("Ln_Entropy_Coefficient")
+        )
+        self.replay_buffer.save(
+            self.get_checkpoint_file("Replay_Buffer_data")
         )
 
     def load_models(self):
@@ -159,9 +164,12 @@ class SAC(object):
         self.pi_optim.load_state_dict(torch.load(os.path.join(
             load_path, "Policy_optimizer_state_dict"
         )))
+        self.alpha_optim.load_state_dict(torch.load(os.path.join(
+            load_path, "Alpha_optimizer_state_dict"
+        )))
         self.log_alpha = torch.load(os.path.join(
             load_path,
-            "Entropy_Coefficient"
+            "Ln_Entropy_Coefficient"
         ))
         self.replay_buffer.load(os.path.join(
             load_path,
