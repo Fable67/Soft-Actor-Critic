@@ -14,6 +14,10 @@ class SoftQNetwork(nn.Module):
         self.hh = nn.Linear(hidden_size, hidden_size)
         self.ho = nn.Linear(hidden_size, 1)
 
+        self.ih.weight.data.uniform_(-3e-3, 3e-3)
+        self.ih.bias.data.uniform_(-3e-3, 3e-3)
+        self.hh.weight.data.uniform_(-3e-3, 3e-3)
+        self.hh.bias.data.uniform_(-3e-3, 3e-3)
         self.ho.weight.data.uniform_(-3e-3, 3e-3)
         self.ho.bias.data.uniform_(-3e-3, 3e-3)
 

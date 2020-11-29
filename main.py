@@ -1,4 +1,5 @@
 import argparse
+import os
 import sys
 sys.path.append("pytorch-SAC")
 
@@ -60,7 +61,7 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    sac = SAC(env_name=args.env_name, data_save_dir=args.log_dir)
+    sac = SAC(env_name=args.env_name, data_save_dir=os.path.join("runs", args.log_dir))
     if not args.test:
         sac.train(resume_training=args.continue_training)
     else:

@@ -3,7 +3,7 @@ import roboschool
 import numpy as np
 import time
 import os
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
+#os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
 import torch
 import torch.nn as nn
@@ -191,13 +191,14 @@ class SAC(object):
         if resume_training:
             self.load_models()
 
-        print(f"Starting training from iteration {self.iteration} for a total of {NUM_ITERATIONS} iterations")
+        i, num_i = self.iteration, NUM_ITERATIONS
+        print(f"Starting training from iteration {i} for a total of {num_i} iterations")
 
-        cumulative_reward = 0
-        average_return = RunningMean()
+        rewards = []
+        average_return = RunningMean(batch_size=10)
         start_time = time.time()
         start_iteration = self.iteration
-        local_iteration = 0
+        expl_iteration = 0
         while self.iteration < NUM_ITERATIONS:
             s = self.env.reset()
             d = False
@@ -210,15 +211,15 @@ class SAC(object):
                 self.replay_buffer.add(s, a, r, ns, d)
                 s = ns
 
-                cumulative_reward += r
+                rewards.append(r)
                 self.iteration += 1
-                local_iteration += 1
+                expl_iteration += 1
 
                 update_cond = \
                     len(self.replay_buffer) >= BATCH_SIZE and \
-                    local_iteration % NUM_EXPL_STEPS_PER_TRAIN_LOOP == 0
+                    expl_iteration % NUM_EXPL_STEPS_PER_TRAIN_LOOP == 0
                 if update_cond:
-                    local_iteration = 0
+                    expl_iteration = 0
                     for _ in range(NUM_TRAINS_PER_TRAIN_LOOP):
                         self._update()
 
@@ -239,7 +240,13 @@ class SAC(object):
                     )
                     start_time += time_eval
 
-            average_return.add(cumulative_reward)
+            return_ = 0
+            for i, r in enumerate(rewards):
+                return_ += r * (GAMMA ** i)
+
+            average_return.add(return_)
+
+            cumulative_reward = sum(rewards)
 
             self.writer.add_scalar(
                 "metrics/cumulative_reward",
@@ -266,10 +273,11 @@ class SAC(object):
                 epoch_steps,
                 self.iteration
             )
+            i, cum_rew, avg_ret = self.iteration, cumulative_reward, average_return.result()
             print(
-                f"Iter {self.iteration} - Reward {cumulative_reward:.4f} - Return {average_return.result():.4f}"
+                f"Iter {i} - Reward {cum_rew:.4f} - Return {avg_ret:.4f}"
             )
-            cumulative_reward = 0
+            rewards = []
             start_time = time.time()
             start_iteration = self.iteration
 
@@ -331,7 +339,7 @@ class SAC(object):
                 s = ns
 
                 if d:
-                    # self.eval_env.close()
+                    self.eval_env.close()
                     break
             cumulative_rewards[i] = cumulative_reward
         self.eval_env.close()
@@ -350,17 +358,13 @@ class SAC(object):
 
         new_action, logprob, _, mean, log_stddev = self.pi_net.evaluate(state)
 
-        alpha_loss = ((-self.log_alpha) * (logprob + self.entropy_target).detach()).sum()
-        self.alpha_optim.zero_grad()
-        alpha_loss.backward()
-        self.alpha_optim.step()
         alpha = self.log_alpha.exp()
 
         q_value = torch.min(
             self.q0_net(state, new_action),
             self.q1_net(state, new_action)
         )
-        pi_loss = (alpha * logprob - q_value).sum()
+        pi_loss = (alpha * logprob - q_value).mean()
 
         pred_q_value_0 = self.q0_net(state, action)
         pred_q_value_1 = self.q1_net(state, action)
@@ -374,16 +378,12 @@ class SAC(object):
         next_soft_q_value = next_q_value - alpha * next_logprob
         q_value_target = reward + GAMMA * (1. - done) * next_soft_q_value
 
-        # q0_loss = 0.5 * self.q_loss(
-        #    pred_q_value_0, q_value_target
-        # )
         q0_loss = 0.5 * (pred_q_value_0 - q_value_target.detach()).pow(2)
-        q0_loss = q0_loss.sum()
-        # q1_loss = 0.5 * self.q_loss(
-        #    pred_q_value_1, q_value_target
-        # )
+        q0_loss = q0_loss.mean()
         q1_loss = 0.5 * (pred_q_value_1 - q_value_target.detach()).pow(2)
-        q1_loss = q1_loss.sum()
+        q1_loss = q1_loss.mean()
+
+        alpha_loss = -(self.log_alpha * (logprob + self.entropy_target).detach()).mean()
 
         self.q0_optim.zero_grad()
         q0_loss.backward()
@@ -396,6 +396,10 @@ class SAC(object):
         self.pi_optim.zero_grad()
         pi_loss.backward()
         self.pi_optim.step()
+
+        self.alpha_optim.zero_grad()
+        alpha_loss.backward()
+        self.alpha_optim.step()
 
         self.q0_target_net = utils.soft_copy(self.q0_target_net, self.q0_net, TAU)
         self.q1_target_net = utils.soft_copy(self.q1_target_net, self.q1_net, TAU)
@@ -412,7 +416,7 @@ class SAC(object):
             )
 
             self.writer.add_scalar(
-                "metrics/alpha", self.log_alpha.exp(), self.iteration
+                "metrics/alpha", alpha, self.iteration
             )
             self.writer.add_scalar(
                 "metrics/stddev", log_stddev.mean().exp(), self.iteration

@@ -4,7 +4,6 @@ from CombinedReplayBuffer import CombinedReplayBuffer
 import torch.optim as optim
 from ranger import Ranger
 
-
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 POLICY_LEARNING_RATE = 3e-4
@@ -19,15 +18,15 @@ TAU = 0.005
 LOGSTD_MIN = -20
 LOGSTD_MAX = 2
 
-INITIAL_REPLAY_SIZE = 1000
+INITIAL_REPLAY_SIZE = 10000
 REPLAY_SIZE = 1000000
 REPLAY_BUFFER = ReplayBuffer
 
 HIDDEN_SIZE = 256
 BATCH_SIZE = 256
 
-NUM_ITERATIONS = 5000000
-EVAL_FREQ = 10000
+NUM_ITERATIONS = 10000000
+EVAL_FREQ = 5000
 NUM_EVAL_GAMES = 10
 SUMMARY_FREQ = 1000
 SAVE_FREQ = 500000
