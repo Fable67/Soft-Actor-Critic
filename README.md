@@ -11,7 +11,8 @@ This implementation uses Pytorch.
 ### What is novel about this implementation?
 
 It supports the Combined experience replay introduced by this paper: [A Deeper Look at Experience Replay](https://arxiv.org/abs/1712.01275) <br>
-It supports the new Ranger optimizer introduced by this blog post: [New Deep Learning Optimizer, Ranger: Synergistic combination of RAdam + LookAhead for the best of both.](https://medium.com/@lessw/new-deep-learning-optimizer-ranger-synergistic-combination-of-radam-lookahead-for-the-best-of-2dc83f79a48d)
+It supports the new Ranger optimizer introduced by this blog post: [New Deep Learning Optimizer, Ranger: Synergistic combination of RAdam + LookAhead for the best of both.](https://medium.com/@lessw/new-deep-learning-optimizer-ranger-synergistic-combination-of-radam-lookahead-for-the-best-of-2dc83f79a48d) <br>
+It supports the Munchausen-SAC introduced by this paper: [Munchausen Reinforcement Learning](https://arxiv.org/abs/2007.14430) 
 
 
 # Getting Started
