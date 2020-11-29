@@ -66,3 +66,6 @@ Liyuan Liu, Haoming Jiang, Pengcheng He, Weizhu Chen, Xiaodong Liu, Jianfeng Gao
 
 [A Deeper Look at Experience Replay](https://arxiv.org/abs/1712.01275). <br>
 Shangtong Zhang, Richard S. Sutton
+
+[Munchausen Reinforcement Learning](https://arxiv.org/abs/2007.14430). <br>
+Nino Vieillard and Olivier Pietquin and Matthieu Geist 
