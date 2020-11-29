@@ -1,5 +1,8 @@
 import gym
-import roboschool
+try:
+    import roboschool
+except:
+    pass
 import numpy as np
 import time
 import os
@@ -348,15 +351,16 @@ class SAC(object):
     def _update(self):
         """Update all model parameters
         """
-        state, action, reward, next_state, done = self.replay_buffer.sample(BATCH_SIZE)
+        with torch.no_grad():
+            state, action, reward, next_state, done = self.replay_buffer.sample(BATCH_SIZE)
 
-        state = torch.FloatTensor(state).to(DEVICE, non_blocking=True)
-        action = torch.FloatTensor(action).to(DEVICE, non_blocking=True)
-        reward = torch.FloatTensor(reward).unsqueeze(1).to(DEVICE, non_blocking=True)
-        next_state = torch.FloatTensor(next_state).to(DEVICE, non_blocking=True)
-        done = torch.FloatTensor(np.float16(done)).unsqueeze(1).to(DEVICE, non_blocking=True)
+            state = torch.FloatTensor(state).to(DEVICE, non_blocking=True)
+            action = torch.FloatTensor(action).to(DEVICE, non_blocking=True)
+            reward = torch.FloatTensor(reward).unsqueeze(1).to(DEVICE, non_blocking=True)
+            next_state = torch.FloatTensor(next_state).to(DEVICE, non_blocking=True)
+            done = torch.FloatTensor(np.float16(done)).unsqueeze(1).to(DEVICE, non_blocking=True)
 
-        new_action, logprob, _, mean, log_stddev = self.pi_net.evaluate(state)
+        new_action, logprob, _, mean, stddev = self.pi_net.evaluate(state)
 
         alpha = self.log_alpha.exp()
 
@@ -366,17 +370,26 @@ class SAC(object):
         )
         pi_loss = (alpha * logprob - q_value).mean()
 
+        with torch.no_grad():
+            next_action, next_logprob, _, _, _ = self.pi_net.evaluate(next_state)
+            next_q_value = torch.min(
+                self.q0_target_net(next_state, next_action),
+                self.q1_target_net(next_state, next_action)
+            )
+            next_soft_q_value = next_q_value - alpha * next_logprob
+            q_value_target = reward + GAMMA * (1. - done) * next_soft_q_value
+
+            if MUNCHAUSEN:
+                with torch.no_grad():
+                    dist = Normal(mean, stddev)
+                    # logprob_actions = self.m_tau * dist.log_prob(actions).mean(1).unsqueeze(1).cpu()
+                    logprob_actions = dist.log_prob(
+                        dist.sample()) - torch.log(1 - action.pow(2) + 1e-6)
+                    logprob_actions = logprob_actions.sum(1, keepdim=True)
+                    q_value_target += M_ALPHA * torch.clamp(M_TAU * logprob_actions, M_L0, 0)
+
         pred_q_value_0 = self.q0_net(state, action)
         pred_q_value_1 = self.q1_net(state, action)
-
-        # with torch.no_grad():
-        next_action, next_logprob, _, _, _ = self.pi_net.evaluate(next_state)
-        next_q_value = torch.min(
-            self.q0_target_net(next_state, next_action),
-            self.q1_target_net(next_state, next_action)
-        )
-        next_soft_q_value = next_q_value - alpha * next_logprob
-        q_value_target = reward + GAMMA * (1. - done) * next_soft_q_value
 
         q0_loss = 0.5 * (pred_q_value_0 - q_value_target.detach()).pow(2)
         q0_loss = q0_loss.mean()
@@ -406,10 +419,10 @@ class SAC(object):
 
         if self.iteration % SUMMARY_FREQ == 0:
 
-            _, _, _, new_mean, new_log_stddev = self.pi_net.evaluate(next_state)
+            _, _, _, new_mean, new_stddev = self.pi_net.evaluate(next_state)
 
-            old_pi = Normal(mean, log_stddev.exp())
-            new_pi = Normal(new_mean, new_log_stddev.exp())
+            old_pi = Normal(mean, stddev)
+            new_pi = Normal(new_mean, new_stddev)
 
             self.writer.add_scalar(
                 "metrics/KL", kl.kl_divergence(old_pi, new_pi).sum(), self.iteration
@@ -419,7 +432,7 @@ class SAC(object):
                 "metrics/alpha", alpha, self.iteration
             )
             self.writer.add_scalar(
-                "metrics/stddev", log_stddev.mean().exp(), self.iteration
+                "metrics/stddev", stddev.mean(), self.iteration
             )
 
             self.writer.add_scalar(

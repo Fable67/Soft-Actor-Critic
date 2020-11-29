@@ -90,7 +90,7 @@ class PolicyNetwork(nn.Module):
         log_prob = normal.log_prob(z) - torch.log(1 - action.pow(2) + 1e-6)
         log_prob = log_prob.sum(1, keepdim=True)
 
-        return action, log_prob, z, mean, log_std
+        return action, log_prob, z, mean, std
 
     def save(self, path):
         torch.save(self.state_dict(), path)
